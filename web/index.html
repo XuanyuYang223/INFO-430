@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Overlap Finder</title>
+<style>
+  :root { --ink:#1d2433; --muted:#667085; --line:#e4e7ec; --accent:#4b2e83; --bg:#f7f7fb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width: 1000px; margin: 0 auto; padding: 40px 20px; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { display:flex; gap:8px; flex-wrap:wrap; }
+  input { flex:1; min-width:220px; padding:12px 14px; font-size:16px; border:1px solid var(--line); border-radius:8px; }
+  button { padding:12px 20px; font-size:16px; border:0; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
+  .chips { margin:12px 0 0; display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:13px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  #status { margin: 24px 0 8px; color: var(--muted); }
+  .wrap { overflow-x:auto; background:#fff; border:1px solid var(--line); border-radius:10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#fafafa; font-weight:600; }
+  tr:last-child td { border-bottom:0; }
+  .title { font-weight:600; }
+  .kw { color: var(--muted); font-size:13px; }
+  .badge { display:inline-block; min-width:64px; text-align:center; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:600; }
+  .high { background:#fde2e1; color:#b42318; } .med { background:#fef0c7; color:#93370d; } .low { background:#e8f5e9; color:#1b5e20; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paper Overlap Finder</h1>
+  <p class="sub">Type your research topic to see which existing papers already cover it, so your idea doesn't overlap.</p>
+
+  <form id="f">
+    <input id="q" placeholder="e.g. query optimization, privacy, misinformation" maxlength="100" autofocus>
+    <button>Search</button>
+  </form>
+  <div class="chips">
+    <span class="chip">large language models</span><span class="chip">privacy</span>
+    <span class="chip">data cleaning</span><span class="chip">misinformation</span><span class="chip">indexing</span>
+  </div>
+
+  <p id="status">Results come from the papers in the database.</p>
+  <div class="wrap" id="wrap" hidden>
+    <table>
+      <thead><tr><th>Overlap</th><th>Paper</th><th>Authors</th><th>Venue</th><th>Year</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const f = document.getElementById('f'), q = document.getElementById('q');
+  const statusEl = document.getElementById('status'), wrap = document.getElementById('wrap'), rows = document.getElementById('rows');
+
+  function cell(text, cls) { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = text ?? ''; return td; }
+  function level(score) { return score >= 5 ? ['High', 'high'] : score >= 3 ? ['Medium', 'med'] : ['Low', 'low']; }
+
+  async function search(topic) {
+    statusEl.textContent = 'Searching…';
+    wrap.hidden = true;
+    try {
+      const res = await fetch('/api/papers?q=' + encodeURIComponent(topic));
+      const data = await res.json();
+      if (!res.ok) { statusEl.textContent = data.error; return; }
+      rows.replaceChildren();
+      for (const p of data) {
+        const tr = document.createElement('tr');
+        const [label, cls] = level(p.score);
+        const b = document.createElement('span'); b.className = 'badge ' + cls; b.textContent = label;
+        const tdB = document.createElement('td'); tdB.append(b);
+        const tdP = document.createElement('td');
+        const t = document.createElement('div'); t.className = 'title'; t.textContent = p.title;
+        const k = document.createElement('div'); k.className = 'kw'; k.textContent = p.keywords;
+        tdP.append(t, k);
+        tr.append(tdB, tdP, cell(p.authors), cell(p.venue_name), cell(p.pub_year));
+        rows.append(tr);
+      }
+      statusEl.textContent = data.length
+        ? `${data.length} paper${data.length === 1 ? '' : 's'} overlap with “${topic}”, most relevant first.`
+        : `No papers found for “${topic}”. Your topic may be new!`;
+      wrap.hidden = data.length === 0;
+    } catch (e) {
+      statusEl.textContent = 'Could not reach the server. Is npm start running?';
+    }
+  }
+
+  f.addEventListener('submit', e => { e.preventDefault(); if (q.value.trim()) search(q.value.trim()); });
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { q.value = c.textContent; search(c.textContent); }));
+</script>
+</body>
+</html>
